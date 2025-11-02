@@ -39,8 +39,10 @@
         .delete-order-btn { color: #ef4444; cursor: pointer; background: none; border: none; font-weight: bold; }
         .search-container { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
         .order-item-detail { background-color: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 10px; }
-        .input-quantity { width: 60px; text-align: center; } /* Style pour la quantité */
-        .input-size { width: 80px; text-align: center; text-transform: uppercase; } /* Style pour la taille */
+        .input-quantity { width: 60px; text-align: center; } 
+        .input-size { width: 80px; text-align: center; text-transform: uppercase; }
+        .clear-db-button { background-color: #b91c1c; color: white; }
+        .clear-db-button:hover { background-color: #991b1b; }
     </style>
 </head>
 <body>
@@ -100,6 +102,9 @@
                 <button id="export-csv-btn" class="nav-button export-button" style="background-color: #3b82f6;">⬇️ Exporter CSV</button>
                 <button id="export-excel-btn" class="nav-button excel-button">📄 Exporter Excel</button>
                 <button id="export-pdf-btn" class="nav-button pdf-button">📄 Exporter PDF</button>
+                <button id="clear-database-btn" class="nav-button action-button clear-db-button">
+                    ⚠️ Effacer la Base de Données
+                </button>
             </div>
         </div>
         
@@ -194,7 +199,6 @@
         ]
     };
 
-    // État étendu : quantities stocke un objet { qty: 0, size: "" } pour chaque référence
     let state = {
         view: 'order',
         firstName: '',
@@ -260,6 +264,34 @@
         $('total').textContent = total.toFixed(2);
     }
 
+    // --- Notification ---
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            background-color: ${type === 'success' ? '#10b981' : '#f97316'};
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.opacity = 0;
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 3000);
+    }
+
     // --- Logique d'Interaction ---
 
     function handleQuantityChange(key, event) {
@@ -291,7 +323,7 @@
         state.discount = 0;
         renderOrderView();
         updateTotal();
-        alert('✅ Saisie effacée ! Vous pouvez commencer une nouvelle commande.');
+        showNotification('Saisie effacée.', 'info');
     }
 
     function handleSubmitOrder() {
@@ -344,307 +376,3 @@
             firstName: state.firstName,
             lastName: state.lastName,
             items,
-            subtotal: calculateSubtotal(),
-            discount: state.discount,
-            total: calculateTotal()
-        };
-
-        const newOrders = [order, ...state.orders];
-        saveOrders(newOrders);
-        alert('✅ Commande enregistrée avec succès !');
-
-        // Réinitialise la saisie après enregistrement
-        state.firstName = '';
-        state.lastName = '';
-        state.quantities = {};
-        state.discount = 0;
-        renderOrderView();
-    }
-
-    function deleteOrder(orderId) {
-        if (confirm('Êtes-vous sûr de vouloir supprimer cette commande passée ?')) {
-            const newOrders = state.orders.filter(o => o.id !== orderId);
-            saveOrders(newOrders);
-            alert('✅ Commande supprimée.');
-        }
-    }
-
-    function handleSearch(event) {
-        state.searchTerm = event.target.value.toLowerCase();
-        renderDatabaseView();
-    }
-
-    // --- Fonctions de Rendu du DOM ---
-
-    function renderOrderView() {
-        $('firstName').value = state.firstName;
-        $('lastName').value = state.lastName;
-        $('discount').value = state.discount;
-
-        const catalogList = $('catalog-list');
-        catalogList.innerHTML = '';
-
-        Object.entries(CATALOG).forEach(([category, products]) => {
-            const categoryDiv = document.createElement('div');
-            categoryDiv.className = 'card';
-            
-            let html = `<div class="category-header" style="background-color: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;">${category}</div>`;
-            // MISE À JOUR : Colonnes Taille et Quantité
-            html += '<table><thead><tr><th>Référence</th><th>Prix Unitaire</th><th style="width: 100px; text-align: center;">Taille</th><th style="width: 80px; text-align: center;">Qté</th><th>Total</th></tr></thead><tbody>';
-            
-            products.forEach(product => {
-                const key = `${category}::${product.ref}`;
-                const data = getQuantityState(key);
-                const qty = data.qty;
-                const size = data.size;
-                const totalPrice = product.price * qty;
-
-                const safeId = key.replace(/[^a-zA-Z0-9]/g, '_');
-
-                html += `
-                    <tr>
-                        <td>${product.ref}</td>
-                        <td>${product.price} €</td>
-                        <td style="text-align: center;">
-                            <input type="text" 
-                                id="${safeId}_size"
-                                class="input-text input-size size-input" 
-                                value="${size}" 
-                                data-key="${key}"
-                                maxlength="10">
-                        </td>
-                        <td style="text-align: center;">
-                            <input type="number" 
-                                id="${safeId}_qty"
-                                class="input-text input-quantity quantity-input" 
-                                value="${qty}" 
-                                min="0" 
-                                data-key="${key}">
-                        </td>
-                        <td>${totalPrice.toFixed(2)} €</td>
-                    </tr>
-                `;
-            });
-
-            html += '</tbody></table>';
-            categoryDiv.innerHTML = html;
-            catalogList.appendChild(categoryDiv);
-        });
-
-        // Ajouter les Event Listeners pour les quantités et les tailles
-        document.querySelectorAll('.quantity-input').forEach(input => {
-            input.addEventListener('input', (event) => {
-                const key = event.target.getAttribute('data-key');
-                handleQuantityChange(key, event);
-                renderOrderView(); 
-            });
-        });
-
-        document.querySelectorAll('.size-input').forEach(input => {
-            input.addEventListener('input', (event) => {
-                const key = event.target.getAttribute('data-key');
-                handleSizeChange(key, event);
-            });
-        });
-
-        updateTotal();
-    }
-
-    function renderDatabaseView() {
-        const ordersList = $('orders-list');
-        ordersList.innerHTML = '';
-        
-        const filteredOrders = state.orders.filter(order => 
-            order.firstName.toLowerCase().includes(state.searchTerm) ||
-            order.lastName.toLowerCase().includes(state.searchTerm)
-        );
-
-        if (filteredOrders.length === 0) {
-            $('no-orders').style.display = 'block';
-            return;
-        } else {
-             $('no-orders').style.display = 'none';
-        }
-
-        filteredOrders.forEach(order => {
-            const orderDiv = document.createElement('div');
-            orderDiv.className = 'card';
-            
-            let html = `
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 10px;">
-                    <h3 style="margin: 0;">
-                        Commande de ${order.firstName} ${order.lastName} 
-                        <span style="font-size: 0.8rem; color: #6b7280;">(${new Date(order.date).toLocaleDateString('fr-FR')})</span>
-                    </h3>
-                    <button class="delete-order-btn" data-order-id="${order.id}">[Supprimer]</button>
-                </div>
-                <div class="order-item-detail">
-                    <p><strong>TOTAL COMMANDE : ${order.total.toFixed(2)} €</strong> (Sous-total: ${order.subtotal.toFixed(2)} €, Remise: -${order.discount.toFixed(2)} €)</p>
-                    <table style="font-size: 0.9rem; margin-top: 10px;">
-                        <thead>
-                            <tr>
-                                <th>Catégorie</th>
-                                <th>Référence</th>
-                                <th style="text-align: center;">Taille</th>
-                                <th style="text-align: center;">Qté</th>
-                                <th style="text-align: right;">Prix Unitaire</th>
-                                <th style="text-align: right;">Total Ligne</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
-            order.items.forEach(item => {
-                html += `
-                    <tr>
-                        <td>${item.category}</td>
-                        <td>${item.ref}</td>
-                        <td style="text-align: center;">${item.size || 'N/A'}</td>
-                        <td style="text-align: center;">${item.quantity}</td>
-                        <td style="text-align: right;">${item.unitPrice.toFixed(2)} €</td>
-                        <td style="text-align: right;">${item.totalPrice.toFixed(2)} €</td>
-                    </tr>
-                `;
-            });
-
-            html += `</tbody></table></div>`;
-            
-            orderDiv.innerHTML = html;
-            ordersList.appendChild(orderDiv);
-        });
-        
-        document.querySelectorAll('.delete-order-btn').forEach(button => {
-            button.addEventListener('click', (event) => {
-                const orderId = event.target.getAttribute('data-order-id');
-                deleteOrder(orderId);
-            });
-        });
-    }
-
-    // --- Fonctions d'Exportation ---
-
-    function exportToCSV() {
-        let csv = 'Date,Prénom,Nom,Catégorie,Référence,Taille,Quantité,Prix Unitaire,Total Ligne,Sous-total,Remise,Total Commande\n';
-        
-        state.orders.forEach(order => {
-            order.items.forEach((item, idx) => {
-                csv += `${new Date(order.date).toLocaleDateString('fr-FR')},`;
-                csv += `${order.firstName},${order.lastName},`;
-                csv += `"${item.category}","${item.ref}",`;
-                csv += `"${item.size || ''}",${item.quantity},${item.unitPrice},${item.totalPrice}`;
-                if (idx === 0) {
-                    csv += `,${order.subtotal},${order.discount},${order.total}`;
-                } else {
-                    csv += ',,,';
-                }
-                csv += '\n';
-            });
-        });
-        
-        const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.csv`;
-        link.click();
-    }
-
-    function exportToExcel() {
-        const dataForSheet = [];
-        
-        dataForSheet.push([
-            'Date', 'Prénom', 'Nom', 'Catégorie', 'Référence', 'Taille', 'Quantité', 
-            'Prix Unitaire (€)', 'Total Ligne (€)', 'Sous-total (€)', 'Remise (€)', 'Total Commande (€)'
-        ]);
-
-        state.orders.forEach(order => {
-            order.items.forEach((item, idx) => {
-                const row = [
-                    new Date(order.date).toLocaleDateString('fr-FR'),
-                    order.firstName,
-                    order.lastName,
-                    item.category,
-                    item.ref,
-                    item.size || '', 
-                    item.quantity,
-                    item.unitPrice.toFixed(2),
-                    item.totalPrice.toFixed(2)
-                ];
-                
-                if (idx === 0) {
-                    row.push(order.subtotal.toFixed(2), order.discount.toFixed(2), order.total.toFixed(2));
-                } else {
-                    row.push('', '', '');
-                }
-                dataForSheet.push(row);
-            });
-        });
-
-        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Commandes Triathlon");
-        
-        const filename = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.xlsx`;
-        XLSX.writeFile(workbook, filename);
-    }
-    
-    function exportToPDF() {
-        const element = $('database-view');
-        
-        const options = {
-            margin: 10,
-            filename: `commandes_triathlon_${new Date().toISOString().split('T')[0]}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        const elementToPrint = element.cloneNode(true);
-        // Supprimer les éléments d'interaction dans le PDF
-        elementToPrint.querySelectorAll('.nav-button, .delete-order-btn, .search-container').forEach(el => el.remove());
-
-        html2pdf().set(options).from(elementToPrint).save();
-    }
-
-    // --- Initialisation et Event Listeners ---
-
-    function setupEventListeners() {
-        $('nav-order').addEventListener('click', () => {
-            state.view = 'order';
-            $('order-view').style.display = 'block';
-            $('database-view').style.display = 'none';
-            $('nav-order').className = 'nav-button active';
-            $('nav-database').className = 'nav-button inactive';
-            renderOrderView();
-        });
-
-        $('nav-database').addEventListener('click', () => {
-            state.view = 'database';
-            $('order-view').style.display = 'none';
-            $('database-view').style.display = 'block';
-            $('nav-order').className = 'nav-button inactive';
-            $('nav-database').className = 'nav-button active';
-            renderDatabaseView();
-        });
-
-        $('submit-order-btn').addEventListener('click', handleSubmitOrder);
-        $('discount').addEventListener('input', handleDiscountChange);
-        $('firstName').addEventListener('input', (e) => state.firstName = e.target.value);
-        $('lastName').addEventListener('input', (e) => state.lastName = e.target.value);
-        $('search-term').addEventListener('input', handleSearch);
-
-        $('reset-current-order-btn').addEventListener('click', resetCurrentOrder);
-
-        $('export-csv-btn').addEventListener('click', exportToCSV);
-        $('export-excel-btn').addEventListener('click', exportToExcel);
-        $('export-pdf-btn').addEventListener('click', exportToPDF);
-    }
-
-    // Démarrage de l'application
-    loadOrders();
-    setupEventListeners();
-    renderOrderView();
-    updateOrderCount();
-
-</script>
-</body>
-</html>
