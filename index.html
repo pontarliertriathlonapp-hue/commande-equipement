@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     
     <style>
-        /* Styles de base pour la structure */
+        /* Styles de base pour la structure (identiques à la version précédente) */
         body { font-family: sans-serif; background-color: #f4f7f9; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
         .navbar { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -39,10 +39,8 @@
         .delete-order-btn { color: #ef4444; cursor: pointer; background: none; border: none; font-weight: bold; }
         .search-container { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
         .order-item-detail { background-color: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 10px; }
-        .input-quantity { width: 60px; text-align: center; } 
-        .input-size { width: 80px; text-align: center; text-transform: uppercase; }
-        .clear-db-button { background-color: #b91c1c; color: white; }
-        .clear-db-button:hover { background-color: #991b1b; }
+        .input-quantity { width: 60px; text-align: center; } /* Style pour la quantité */
+        .input-size { width: 80px; text-align: center; text-transform: uppercase; } /* Style pour la taille */
     </style>
 </head>
 <body>
@@ -102,9 +100,6 @@
                 <button id="export-csv-btn" class="nav-button export-button" style="background-color: #3b82f6;">⬇️ Exporter CSV</button>
                 <button id="export-excel-btn" class="nav-button excel-button">📄 Exporter Excel</button>
                 <button id="export-pdf-btn" class="nav-button pdf-button">📄 Exporter PDF</button>
-                <button id="clear-database-btn" class="nav-button action-button clear-db-button">
-                    ⚠️ Effacer la Base de Données
-                </button>
             </div>
         </div>
         
@@ -199,6 +194,9 @@
         ]
     };
 
+    // État étendu : quantities est maintenant un objet qui stocke l'état complet de la ligne (qty et size)
+    // Clé: `category::ref` (ex: "TRI FONCTION HOMMES::NORSAE_V2 Peau S-TRI")
+    // Valeur: { qty: 0, size: "" }
     let state = {
         view: 'order',
         firstName: '',
@@ -229,6 +227,7 @@
         $('orders-count').textContent = state.orders.length;
     }
 
+    // Fonction d'aide pour obtenir ou créer l'objet de quantité/taille
     function getQuantityState(key) {
         if (!state.quantities[key]) {
             state.quantities[key] = { qty: 0, size: "" };
@@ -264,34 +263,6 @@
         $('total').textContent = total.toFixed(2);
     }
 
-    // --- Notification ---
-    function showNotification(message, type) {
-        const notification = document.createElement('div');
-        notification.textContent = message;
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px 25px;
-            border-radius: 8px;
-            color: white;
-            font-weight: bold;
-            z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-            background-color: ${type === 'success' ? '#10b981' : '#f97316'};
-            transition: opacity 0.3s ease-in-out;
-            opacity: 1;
-        `;
-        document.body.appendChild(notification);
-        
-        setTimeout(() => {
-            notification.style.opacity = 0;
-            setTimeout(() => {
-                notification.remove();
-            }, 300);
-        }, 3000);
-    }
-
     // --- Logique d'Interaction ---
 
     function handleQuantityChange(key, event) {
@@ -305,6 +276,7 @@
         const value = event.target.value.toUpperCase().trim();
         const data = getQuantityState(key);
         data.size = value;
+        // Pas besoin de recalculer le total, mais on garde la taille en état
     }
 
     function handleDiscountChange(event) {
@@ -323,7 +295,7 @@
         state.discount = 0;
         renderOrderView();
         updateTotal();
-        showNotification('Saisie effacée.', 'info');
+        alert('✅ Saisie effacée ! Vous pouvez commencer une nouvelle commande.');
     }
 
     function handleSubmitOrder() {
@@ -344,18 +316,18 @@
                 const product = CATALOG[category].find(p => p.ref === ref);
                 
                 if (product) {
-                    // Validation de la taille : Si la quantité > 0, la taille doit être renseignée.
+                    // **Validation de la taille :** Si la quantité > 0, la taille doit être renseignée.
                     if (!data.size) {
                         alert(`Veuillez saisir la taille pour le produit : "${product.ref}" (Catégorie: "${category}")`);
                         hasError = true;
-                        return;
+                        return; // Sortir de la boucle forEach interne
                     }
 
                     items.push({
                         category,
                         ref: product.ref,
                         quantity: data.qty,
-                        size: data.size, 
+                        size: data.size, // Ajout de la taille
                         unitPrice: product.price,
                         totalPrice: product.price * data.qty
                     });
@@ -383,7 +355,7 @@
 
         const newOrders = [order, ...state.orders];
         saveOrders(newOrders);
-        showNotification(`Commande de ${state.firstName} ${state.lastName} enregistrée.`, 'success');
+        alert('✅ Commande enregistrée avec succès !');
 
         // Réinitialise la saisie après enregistrement
         state.firstName = '';
@@ -397,19 +369,7 @@
         if (confirm('Êtes-vous sûr de vouloir supprimer cette commande passée ?')) {
             const newOrders = state.orders.filter(o => o.id !== orderId);
             saveOrders(newOrders);
-            showNotification('Commande supprimée.', 'info');
-        }
-    }
-
-    function clearDatabase() {
-        if (confirm('⚠️ ATTENTION : Êtes-vous sûr de vouloir supprimer TOUTES les commandes enregistrées ? Cette action est IRRÉVERSIBLE.')) {
-            if (confirm('Vraiment supprimer TOUTES les données ? (Cliquez sur OK pour confirmer la suppression définitive)')) {
-                localStorage.removeItem('triathlonOrders');
-                state.orders = [];
-                updateOrderCount();
-                renderDatabaseView();
-                showNotification('Base de données effacée.', 'success');
-            }
+            alert('✅ Commande supprimée.');
         }
     }
 
@@ -421,8 +381,6 @@
     // --- Fonctions de Rendu du DOM ---
 
     function renderOrderView() {
-        // ... (Le rendu du catalogue reste le même, mais il est reproduit ici pour la complétude) ...
-
         $('firstName').value = state.firstName;
         $('lastName').value = state.lastName;
         $('discount').value = state.discount;
@@ -435,6 +393,7 @@
             categoryDiv.className = 'card';
             
             let html = `<div class="category-header" style="background-color: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;">${category}</div>`;
+            // **MISE À JOUR DES ENTÊTES : Ajout de la colonne Taille**
             html += '<table><thead><tr><th>Référence</th><th>Prix Unitaire</th><th style="width: 100px; text-align: center;">Taille</th><th style="width: 80px; text-align: center;">Qté</th><th>Total</th></tr></thead><tbody>';
             
             products.forEach(product => {
@@ -444,7 +403,7 @@
                 const size = data.size;
                 const totalPrice = product.price * qty;
 
-                const safeId = key.replace(/[^a-zA-Z0-9]/g, '_');
+                const safeId = key.replace(/[^a-zA-Z0-9]/g, '_'); // ID sans caractères spéciaux
 
                 html += `
                     <tr>
@@ -476,11 +435,12 @@
             catalogList.appendChild(categoryDiv);
         });
 
+        // Ajouter les Event Listeners pour les quantités et les tailles
         document.querySelectorAll('.quantity-input').forEach(input => {
             input.addEventListener('input', (event) => {
                 const key = event.target.getAttribute('data-key');
                 handleQuantityChange(key, event);
-                renderOrderView(); 
+                renderOrderView(); // Re-render pour mettre à jour les totaux des lignes
             });
         });
 
@@ -529,8 +489,7 @@
                             <tr>
                                 <th>Catégorie</th>
                                 <th>Référence</th>
-                                <th style="text-align: center;">Taille</th>
-                                <th style="text-align: center;">Qté</th>
+                                <th style="text-align: center;">Taille</th> <th style="text-align: center;">Qté</th>
                                 <th style="text-align: right;">Prix Unitaire</th>
                                 <th style="text-align: right;">Total Ligne</th>
                             </tr>
@@ -543,8 +502,7 @@
                     <tr>
                         <td>${item.category}</td>
                         <td>${item.ref}</td>
-                        <td style="text-align: center;">${item.size || 'N/A'}</td>
-                        <td style="text-align: center;">${item.quantity}</td>
+                        <td style="text-align: center;">${item.size || 'N/A'}</td> <td style="text-align: center;">${item.quantity}</td>
                         <td style="text-align: right;">${item.unitPrice.toFixed(2)} €</td>
                         <td style="text-align: right;">${item.totalPrice.toFixed(2)} €</td>
                     </tr>
@@ -565,9 +523,10 @@
         });
     }
 
-    // --- Fonctions d'Exportation ---
+    // --- Fonctions d'Exportation (Mise à jour pour inclure la taille) ---
 
     function exportToCSV() {
+        // **MISE À JOUR DES ENTÊTES : Ajout de la colonne Taille**
         let csv = 'Date,Prénom,Nom,Catégorie,Référence,Taille,Quantité,Prix Unitaire,Total Ligne,Sous-total,Remise,Total Commande\n';
         
         state.orders.forEach(order => {
@@ -591,56 +550,12 @@
         link.download = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.csv`;
         link.click();
     }
-    
-    // NOUVELLE LOGIQUE pour préparer les données de l'onglet "Statistiques"
-    function prepareReferenceStats() {
-        const stats = {};
-        const allSizes = new Set();
-
-        state.orders.forEach(order => {
-            order.items.forEach(item => {
-                const key = `${item.category}::${item.ref}`;
-                const size = item.size.toUpperCase().trim() || 'N/A'; // Taille par défaut si vide
-                const qty = item.quantity;
-
-                if (!stats[key]) {
-                    stats[key] = {
-                        category: item.category,
-                        ref: item.ref,
-                        price: item.unitPrice,
-                        sizes: {},
-                        totalQty: 0
-                    };
-                }
-
-                // Aggregate quantity by size
-                stats[key].sizes[size] = (stats[key].sizes[size] || 0) + qty;
-                stats[key].totalQty += qty;
-                allSizes.add(size);
-            });
-        });
-
-        // Triez les tailles pour un affichage cohérent (ex: S, M, L, XL, XXL)
-        const sortedSizes = Array.from(allSizes).sort((a, b) => {
-            const order = ['S', 'M', 'L', 'XL', 'XXL', 'N/A'];
-            const aIndex = order.indexOf(a.toUpperCase());
-            const bIndex = order.indexOf(b.toUpperCase());
-            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-            return a.localeCompare(b);
-        });
-
-        return { stats, sortedSizes };
-    }
-
 
     function exportToExcel() {
-        const workbook = XLSX.utils.book_new();
-
-        // ------------------------------------------
-        // SHEET 1: Commandes par Athlète
-        // ------------------------------------------
-        const dataForSheet1 = [];
-        dataForSheet1.push([
+        const dataForSheet = [];
+        
+        // **MISE À JOUR DES ENTÊTES : Ajout de la colonne Taille**
+        dataForSheet.push([
             'Date', 'Prénom', 'Nom', 'Catégorie', 'Référence', 'Taille', 'Quantité', 
             'Prix Unitaire (€)', 'Total Ligne (€)', 'Sous-total (€)', 'Remise (€)', 'Total Commande (€)'
         ]);
@@ -653,7 +568,7 @@
                     order.lastName,
                     item.category,
                     item.ref,
-                    item.size || '', 
+                    item.size || '', // Ajout de la taille
                     item.quantity,
                     item.unitPrice.toFixed(2),
                     item.totalPrice.toFixed(2)
@@ -664,50 +579,14 @@
                 } else {
                     row.push('', '', '');
                 }
-                dataForSheet1.push(row);
+                dataForSheet.push(row);
             });
         });
 
-        const worksheet1 = XLSX.utils.aoa_to_sheet(dataForSheet1);
-        XLSX.utils.book_append_sheet(workbook, worksheet1, "1. Commandes par Athlète");
-
-
-        // ------------------------------------------
-        // SHEET 2: Stats Réf/Taille
-        // ------------------------------------------
-        const { stats, sortedSizes } = prepareReferenceStats();
+        const worksheet = XLSX.utils.aoa_to_sheet(dataForSheet);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Commandes Triathlon");
         
-        if (Object.keys(stats).length > 0) { 
-            const dataForSheet2 = [];
-
-            // Header for Sheet 2
-            const header2 = ['Catégorie', 'Référence', 'Prix Unitaire (€)', ...sortedSizes, 'TOTAL (Qté)'];
-            dataForSheet2.push(header2);
-
-            // Rows for Sheet 2
-            Object.values(stats).forEach(data => {
-                const row = [
-                    data.category,
-                    data.ref,
-                    data.price.toFixed(2)
-                ];
-
-                // Add quantity for each size in the sorted header order
-                sortedSizes.forEach(size => {
-                    row.push(data.sizes[size] || 0);
-                });
-
-                // Add total quantity
-                row.push(data.totalQty);
-                dataForSheet2.push(row);
-            });
-
-            const worksheet2 = XLSX.utils.aoa_to_sheet(dataForSheet2);
-            XLSX.utils.book_append_sheet(workbook, worksheet2, "2. Stats Réf/Taille");
-        }
-
-
-        // Final export
         const filename = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.xlsx`;
         XLSX.writeFile(workbook, filename);
     }
@@ -724,8 +603,8 @@
         };
 
         const elementToPrint = element.cloneNode(true);
-        // Supprimer les éléments d'interaction dans le PDF
-        elementToPrint.querySelectorAll('.nav-button, .delete-order-btn, .search-container, #clear-database-btn').forEach(el => el.remove());
+        // Supprimer les éléments d'interaction
+        elementToPrint.querySelectorAll('.nav-button, .delete-order-btn, .search-container').forEach(el => el.remove());
 
         html2pdf().set(options).from(elementToPrint).save();
     }
@@ -758,7 +637,6 @@
         $('search-term').addEventListener('input', handleSearch);
 
         $('reset-current-order-btn').addEventListener('click', resetCurrentOrder);
-        $('clear-database-btn').addEventListener('click', clearDatabase); // NOUVEAU
 
         $('export-csv-btn').addEventListener('click', exportToCSV);
         $('export-excel-btn').addEventListener('click', exportToExcel);
