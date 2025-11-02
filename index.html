@@ -376,3 +376,401 @@
             firstName: state.firstName,
             lastName: state.lastName,
             items,
+            subtotal: calculateSubtotal(),
+            discount: state.discount,
+            total: calculateTotal()
+        };
+
+        const newOrders = [order, ...state.orders];
+        saveOrders(newOrders);
+        showNotification(`Commande de ${state.firstName} ${state.lastName} enregistrée.`, 'success');
+
+        // Réinitialise la saisie après enregistrement
+        state.firstName = '';
+        state.lastName = '';
+        state.quantities = {};
+        state.discount = 0;
+        renderOrderView();
+    }
+
+    function deleteOrder(orderId) {
+        if (confirm('Êtes-vous sûr de vouloir supprimer cette commande passée ?')) {
+            const newOrders = state.orders.filter(o => o.id !== orderId);
+            saveOrders(newOrders);
+            showNotification('Commande supprimée.', 'info');
+        }
+    }
+
+    function clearDatabase() {
+        if (confirm('⚠️ ATTENTION : Êtes-vous sûr de vouloir supprimer TOUTES les commandes enregistrées ? Cette action est IRRÉVERSIBLE.')) {
+            if (confirm('Vraiment supprimer TOUTES les données ? (Cliquez sur OK pour confirmer la suppression définitive)')) {
+                localStorage.removeItem('triathlonOrders');
+                state.orders = [];
+                updateOrderCount();
+                renderDatabaseView();
+                showNotification('Base de données effacée.', 'success');
+            }
+        }
+    }
+
+    function handleSearch(event) {
+        state.searchTerm = event.target.value.toLowerCase();
+        renderDatabaseView();
+    }
+
+    // --- Fonctions de Rendu du DOM ---
+
+    function renderOrderView() {
+        // ... (Le rendu du catalogue reste le même, mais il est reproduit ici pour la complétude) ...
+
+        $('firstName').value = state.firstName;
+        $('lastName').value = state.lastName;
+        $('discount').value = state.discount;
+
+        const catalogList = $('catalog-list');
+        catalogList.innerHTML = '';
+
+        Object.entries(CATALOG).forEach(([category, products]) => {
+            const categoryDiv = document.createElement('div');
+            categoryDiv.className = 'card';
+            
+            let html = `<div class="category-header" style="background-color: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;">${category}</div>`;
+            html += '<table><thead><tr><th>Référence</th><th>Prix Unitaire</th><th style="width: 100px; text-align: center;">Taille</th><th style="width: 80px; text-align: center;">Qté</th><th>Total</th></tr></thead><tbody>';
+            
+            products.forEach(product => {
+                const key = `${category}::${product.ref}`;
+                const data = getQuantityState(key);
+                const qty = data.qty;
+                const size = data.size;
+                const totalPrice = product.price * qty;
+
+                const safeId = key.replace(/[^a-zA-Z0-9]/g, '_');
+
+                html += `
+                    <tr>
+                        <td>${product.ref}</td>
+                        <td>${product.price} €</td>
+                        <td style="text-align: center;">
+                            <input type="text" 
+                                id="${safeId}_size"
+                                class="input-text input-size size-input" 
+                                value="${size}" 
+                                data-key="${key}"
+                                maxlength="10">
+                        </td>
+                        <td style="text-align: center;">
+                            <input type="number" 
+                                id="${safeId}_qty"
+                                class="input-text input-quantity quantity-input" 
+                                value="${qty}" 
+                                min="0" 
+                                data-key="${key}">
+                        </td>
+                        <td>${totalPrice.toFixed(2)} €</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            categoryDiv.innerHTML = html;
+            catalogList.appendChild(categoryDiv);
+        });
+
+        document.querySelectorAll('.quantity-input').forEach(input => {
+            input.addEventListener('input', (event) => {
+                const key = event.target.getAttribute('data-key');
+                handleQuantityChange(key, event);
+                renderOrderView(); 
+            });
+        });
+
+        document.querySelectorAll('.size-input').forEach(input => {
+            input.addEventListener('input', (event) => {
+                const key = event.target.getAttribute('data-key');
+                handleSizeChange(key, event);
+            });
+        });
+
+        updateTotal();
+    }
+
+    function renderDatabaseView() {
+        const ordersList = $('orders-list');
+        ordersList.innerHTML = '';
+        
+        const filteredOrders = state.orders.filter(order => 
+            order.firstName.toLowerCase().includes(state.searchTerm) ||
+            order.lastName.toLowerCase().includes(state.searchTerm)
+        );
+
+        if (filteredOrders.length === 0) {
+            $('no-orders').style.display = 'block';
+            return;
+        } else {
+             $('no-orders').style.display = 'none';
+        }
+
+        filteredOrders.forEach(order => {
+            const orderDiv = document.createElement('div');
+            orderDiv.className = 'card';
+            
+            let html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">
+                        Commande de ${order.firstName} ${order.lastName} 
+                        <span style="font-size: 0.8rem; color: #6b7280;">(${new Date(order.date).toLocaleDateString('fr-FR')})</span>
+                    </h3>
+                    <button class="delete-order-btn" data-order-id="${order.id}">[Supprimer]</button>
+                </div>
+                <div class="order-item-detail">
+                    <p><strong>TOTAL COMMANDE : ${order.total.toFixed(2)} €</strong> (Sous-total: ${order.subtotal.toFixed(2)} €, Remise: -${order.discount.toFixed(2)} €)</p>
+                    <table style="font-size: 0.9rem; margin-top: 10px;">
+                        <thead>
+                            <tr>
+                                <th>Catégorie</th>
+                                <th>Référence</th>
+                                <th style="text-align: center;">Taille</th>
+                                <th style="text-align: center;">Qté</th>
+                                <th style="text-align: right;">Prix Unitaire</th>
+                                <th style="text-align: right;">Total Ligne</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            order.items.forEach(item => {
+                html += `
+                    <tr>
+                        <td>${item.category}</td>
+                        <td>${item.ref}</td>
+                        <td style="text-align: center;">${item.size || 'N/A'}</td>
+                        <td style="text-align: center;">${item.quantity}</td>
+                        <td style="text-align: right;">${item.unitPrice.toFixed(2)} €</td>
+                        <td style="text-align: right;">${item.totalPrice.toFixed(2)} €</td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table></div>`;
+            
+            orderDiv.innerHTML = html;
+            ordersList.appendChild(orderDiv);
+        });
+        
+        document.querySelectorAll('.delete-order-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const orderId = event.target.getAttribute('data-order-id');
+                deleteOrder(orderId);
+            });
+        });
+    }
+
+    // --- Fonctions d'Exportation ---
+
+    function exportToCSV() {
+        let csv = 'Date,Prénom,Nom,Catégorie,Référence,Taille,Quantité,Prix Unitaire,Total Ligne,Sous-total,Remise,Total Commande\n';
+        
+        state.orders.forEach(order => {
+            order.items.forEach((item, idx) => {
+                csv += `${new Date(order.date).toLocaleDateString('fr-FR')},`;
+                csv += `${order.firstName},${order.lastName},`;
+                csv += `"${item.category}","${item.ref}",`;
+                csv += `"${item.size || ''}",${item.quantity},${item.unitPrice},${item.totalPrice}`;
+                if (idx === 0) {
+                    csv += `,${order.subtotal},${order.discount},${order.total}`;
+                } else {
+                    csv += ',,,';
+                }
+                csv += '\n';
+            });
+        });
+        
+        const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    }
+    
+    // NOUVELLE LOGIQUE pour préparer les données de l'onglet "Statistiques"
+    function prepareReferenceStats() {
+        const stats = {};
+        const allSizes = new Set();
+
+        state.orders.forEach(order => {
+            order.items.forEach(item => {
+                const key = `${item.category}::${item.ref}`;
+                const size = item.size.toUpperCase().trim() || 'N/A'; // Taille par défaut si vide
+                const qty = item.quantity;
+
+                if (!stats[key]) {
+                    stats[key] = {
+                        category: item.category,
+                        ref: item.ref,
+                        price: item.unitPrice,
+                        sizes: {},
+                        totalQty: 0
+                    };
+                }
+
+                // Aggregate quantity by size
+                stats[key].sizes[size] = (stats[key].sizes[size] || 0) + qty;
+                stats[key].totalQty += qty;
+                allSizes.add(size);
+            });
+        });
+
+        // Triez les tailles pour un affichage cohérent (ex: S, M, L, XL, XXL)
+        const sortedSizes = Array.from(allSizes).sort((a, b) => {
+            const order = ['S', 'M', 'L', 'XL', 'XXL', 'N/A'];
+            const aIndex = order.indexOf(a.toUpperCase());
+            const bIndex = order.indexOf(b.toUpperCase());
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            return a.localeCompare(b);
+        });
+
+        return { stats, sortedSizes };
+    }
+
+
+    function exportToExcel() {
+        const workbook = XLSX.utils.book_new();
+
+        // ------------------------------------------
+        // SHEET 1: Commandes par Athlète
+        // ------------------------------------------
+        const dataForSheet1 = [];
+        dataForSheet1.push([
+            'Date', 'Prénom', 'Nom', 'Catégorie', 'Référence', 'Taille', 'Quantité', 
+            'Prix Unitaire (€)', 'Total Ligne (€)', 'Sous-total (€)', 'Remise (€)', 'Total Commande (€)'
+        ]);
+
+        state.orders.forEach(order => {
+            order.items.forEach((item, idx) => {
+                const row = [
+                    new Date(order.date).toLocaleDateString('fr-FR'),
+                    order.firstName,
+                    order.lastName,
+                    item.category,
+                    item.ref,
+                    item.size || '', 
+                    item.quantity,
+                    item.unitPrice.toFixed(2),
+                    item.totalPrice.toFixed(2)
+                ];
+                
+                if (idx === 0) {
+                    row.push(order.subtotal.toFixed(2), order.discount.toFixed(2), order.total.toFixed(2));
+                } else {
+                    row.push('', '', '');
+                }
+                dataForSheet1.push(row);
+            });
+        });
+
+        const worksheet1 = XLSX.utils.aoa_to_sheet(dataForSheet1);
+        XLSX.utils.book_append_sheet(workbook, worksheet1, "1. Commandes par Athlète");
+
+
+        // ------------------------------------------
+        // SHEET 2: Stats Réf/Taille
+        // ------------------------------------------
+        const { stats, sortedSizes } = prepareReferenceStats();
+        
+        if (Object.keys(stats).length > 0) { 
+            const dataForSheet2 = [];
+
+            // Header for Sheet 2
+            const header2 = ['Catégorie', 'Référence', 'Prix Unitaire (€)', ...sortedSizes, 'TOTAL (Qté)'];
+            dataForSheet2.push(header2);
+
+            // Rows for Sheet 2
+            Object.values(stats).forEach(data => {
+                const row = [
+                    data.category,
+                    data.ref,
+                    data.price.toFixed(2)
+                ];
+
+                // Add quantity for each size in the sorted header order
+                sortedSizes.forEach(size => {
+                    row.push(data.sizes[size] || 0);
+                });
+
+                // Add total quantity
+                row.push(data.totalQty);
+                dataForSheet2.push(row);
+            });
+
+            const worksheet2 = XLSX.utils.aoa_to_sheet(dataForSheet2);
+            XLSX.utils.book_append_sheet(workbook, worksheet2, "2. Stats Réf/Taille");
+        }
+
+
+        // Final export
+        const filename = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.xlsx`;
+        XLSX.writeFile(workbook, filename);
+    }
+    
+    function exportToPDF() {
+        const element = $('database-view');
+        
+        const options = {
+            margin: 10,
+            filename: `commandes_triathlon_${new Date().toISOString().split('T')[0]}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        const elementToPrint = element.cloneNode(true);
+        // Supprimer les éléments d'interaction dans le PDF
+        elementToPrint.querySelectorAll('.nav-button, .delete-order-btn, .search-container, #clear-database-btn').forEach(el => el.remove());
+
+        html2pdf().set(options).from(elementToPrint).save();
+    }
+
+    // --- Initialisation et Event Listeners ---
+
+    function setupEventListeners() {
+        $('nav-order').addEventListener('click', () => {
+            state.view = 'order';
+            $('order-view').style.display = 'block';
+            $('database-view').style.display = 'none';
+            $('nav-order').className = 'nav-button active';
+            $('nav-database').className = 'nav-button inactive';
+            renderOrderView();
+        });
+
+        $('nav-database').addEventListener('click', () => {
+            state.view = 'database';
+            $('order-view').style.display = 'none';
+            $('database-view').style.display = 'block';
+            $('nav-order').className = 'nav-button inactive';
+            $('nav-database').className = 'nav-button active';
+            renderDatabaseView();
+        });
+
+        $('submit-order-btn').addEventListener('click', handleSubmitOrder);
+        $('discount').addEventListener('input', handleDiscountChange);
+        $('firstName').addEventListener('input', (e) => state.firstName = e.target.value);
+        $('lastName').addEventListener('input', (e) => state.lastName = e.target.value);
+        $('search-term').addEventListener('input', handleSearch);
+
+        $('reset-current-order-btn').addEventListener('click', resetCurrentOrder);
+        $('clear-database-btn').addEventListener('click', clearDatabase); // NOUVEAU
+
+        $('export-csv-btn').addEventListener('click', exportToCSV);
+        $('export-excel-btn').addEventListener('click', exportToExcel);
+        $('export-pdf-btn').addEventListener('click', exportToPDF);
+    }
+
+    // Démarrage de l'application
+    loadOrders();
+    setupEventListeners();
+    renderOrderView();
+    updateOrderCount();
+
+</script>
+</body>
+</html>
