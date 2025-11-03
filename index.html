@@ -1,1 +1,137 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Commandes Triathlon</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f7f9; padding: 20px; }
+    .nav-button { padding: 10px 20px; margin: 5px; font-weight: bold; border-radius: 6px; cursor: pointer; }
+    .pdf-button { background-color: #f97316; color: white; }
+    .pdf-button:hover { background-color: #ea580c; }
+  </style>
+</head>
+<body>
+  <h1>Export des Commandes Triathlon</h1>
+  <button id="export-pdf-btn" class="nav-button pdf-button">📄 Exporter PDF</button>
+  <button id="preview-pdf-btn" class="nav-button pdf-button">👁️ Prévisualiser PDF</button>
+
+  <script>
+    const state = {
+      orders: [
+        {
+          id: "order-001",
+          date: new Date().toISOString(),
+          firstName: "Alice",
+          lastName: "Durand",
+          subtotal: 200,
+          discount: 20,
+          total: 180,
+          items: [
+            { category: "TRI FONCTION FEMMES", ref: "FLORIDA_V2", size: "M", quantity: 2, unitPrice: 72, totalPrice: 144 },
+            { category: "ACCESSOIRES", ref: "Filet de natation", size: "N/A", quantity: 1, unitPrice: 20, totalPrice: 20 },
+          ]
+        },
+        {
+          id: "order-002",
+          date: new Date().toISOString(),
+          firstName: "Bruno",
+          lastName: "Martin",
+          subtotal: 103,
+          discount: 0,
+          total: 103,
+          items: [
+            { category: "TRI FONCTION HOMMES", ref: "BORNEO V4", size: "L", quantity: 1, unitPrice: 103, totalPrice: 103 },
+          ]
+        }
+      ]
+    };
+
+    function generateOrderHTML(order) {
+      return `
+      <div style="border: 3px solid #3b82f6; padding: 20px; margin-bottom: 20px;">
+        <h1 style="text-align: center; color: #3b82f6;">BON DE COMMANDE TRIATHLON</h1>
+        <p style="text-align: center; color: #6b7280;">Date: ${new Date(order.date).toLocaleDateString('fr-FR')}</p>
+      </div>
+      <div style="background-color: #eff6ff; padding: 15px; border-left: 4px solid #3b82f6;">
+        <h2>Informations Client</h2>
+        <p><strong>Prénom :</strong> ${order.firstName}</p>
+        <p><strong>Nom :</strong> ${order.lastName}</p>
+        <p style="color: #6b7280;">N° Commande : ${order.id}</p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        <thead>
+          <tr style="background-color: #3b82f6; color: white;">
+            <th>Catégorie</th><th>Référence</th><th>Taille</th><th>Qté</th><th>Prix Unit.</th><th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${order.items.map((item, idx) => `
+            <tr style="background-color: ${idx % 2 === 0 ? '#f9fafb' : 'white'};">
+              <td>${item.category}</td>
+              <td>${item.ref}</td>
+              <td style="text-align: center; font-weight: bold;">${item.size}</td>
+              <td style="text-align: center;">${item.quantity}</td>
+              <td style="text-align: right;">${item.unitPrice.toFixed(2)} €</td>
+              <td style="text-align: right;">${item.totalPrice.toFixed(2)} €</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <div style="margin-top: 20px; background-color: #f3f4f6; padding: 15px;">
+        <p><strong>Sous-total :</strong> ${order.subtotal.toFixed(2)} €</p>
+        ${order.discount > 0 ? `<p style="color: #059669;"><strong>Remise :</strong> -${order.discount.toFixed(2)} €</p>` : ''}
+        <p style="font-size: 20px; color: #3b82f6;"><strong>TOTAL :</strong> ${order.total.toFixed(2)} €</p>
+      </div>
+      <p style="font-size: 11px; color: #6b7280; text-align: center; margin-top: 30px;">
+        Ce bon de commande fait foi entre le club et le triathlète.<br>
+        Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+      </p>`;
+    }
+
+    function exportToPDF() {
+      const pdfContainer = document.createElement('div');
+      pdfContainer.style.cssText = 'position: absolute; left: -9999px; width: 210mm; padding: 20px; background: white;';
+      document.body.appendChild(pdfContainer);
+
+      state.orders.forEach(order => {
+        const page = document.createElement('div');
+        page.style.cssText = 'page-break-after: always; padding: 20px;';
+        page.innerHTML = generateOrderHTML(order);
+        pdfContainer.appendChild(page);
+      });
+
+      const options = {
+        margin: 10,
+        filename: `bons_commande_triathlon_${new Date().toISOString().split('T')[0]}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      setTimeout(() => {
+        html2pdf().set(options).from(pdfContainer).save().then(() => {
+          document.body.removeChild(pdfContainer);
+          alert("PDF généré avec succès.");
+        });
+      }, 500);
+    }
+
+    function previewPDF() {
+      const previewWindow = window.open('', '_blank');
+      previewWindow.document.write('<html><head><title>Prévisualisation PDF</title></head><body style="font-family: Arial;">');
+      state.orders.forEach(order => {
+        previewWindow.document.write(`<div style="page-break-after: always; padding: 20px;">${generateOrderHTML(order)}</div>`);
+      });
+      previewWindow.document.write('</body></html>');
+      previewWindow.document.close();
+    }
+
+    document.getElementById('export-pdf-btn').addEventListener('click', exportToPDF);
+    document.getElementById('preview-pdf-btn').addEventListener('click', previewPDF);
+  </script>
+</body>
+</html>
 
