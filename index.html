@@ -722,14 +722,16 @@
 
         // Créer un conteneur temporaire pour le PDF
         const pdfContainer = document.createElement('div');
-        // FIX BUG: Utilisation d'un style plus fiable (opacity: 0; z-index: -9999;) 
-        // pour cacher le contenu sans empêcher son rendu DOM/CSS par le navigateur.
-        pdfContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 210mm; padding: 20px; background: white; z-index: -9999; opacity: 0; font-family: Arial, sans-serif;';
+        // FIX BUG MAJEUR: Utilisation d'un style plus fiable (opacity: 0; z-index: -9999;) 
+        // pour cacher le contenu sans empêcher son rendu DOM/CSS.
+        // Ajout de dimensions explicites pour forcer le calcul du rendu (210mm x 297mm = A4).
+        pdfContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 210mm; height: 297mm; padding: 0; background: white; z-index: -9999; opacity: 0; font-family: Arial, sans-serif;';
         
         state.orders.forEach((order, index) => {
             // Créer un bon de commande pour chaque athlète
             const orderPage = document.createElement('div');
-            orderPage.style.cssText = 'page-break-after: always; padding: 20px;';
+            // 'page-break-after: always;' est crucial ici. Ajout de min-height pour aider l'export.
+            orderPage.style.cssText = 'page-break-after: always; padding: 20px; box-sizing: border-box; min-height: 297mm;';
             
             orderPage.innerHTML = `
                 <div style="border: 3px solid #3b82f6; padding: 20px; margin-bottom: 20px;">
@@ -818,20 +820,21 @@
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2 },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            // CHANGEMENT CRITIQUE: Forcer le mode legacy pour les sauts de page.
+            pagebreak: { mode: ['legacy'] } 
         };
 
-        // FIX BUG: Ajout d'un léger délai (10ms) pour garantir que le DOM a fini de traiter l'ajout de l'élément avant de le capturer.
+        // Ajout d'un délai pour garantir que le DOM est prêt.
         setTimeout(() => {
             html2pdf().set(options).from(pdfContainer).save().then(() => {
                 document.body.removeChild(pdfContainer);
                 showNotification('PDF des bons de commande généré avec succès.', 'success');
             }).catch(error => {
                 console.error("Erreur de génération PDF:", error);
-                document.body.removeChild(pdfContainer); // Nettoyer même en cas d'échec
+                document.body.removeChild(pdfContainer); 
                 alert("Erreur lors de la génération du PDF. Vérifiez la console pour les détails.");
             });
-        }, 10);
+        }, 50); 
     }
 
     function setupEventListeners() {
