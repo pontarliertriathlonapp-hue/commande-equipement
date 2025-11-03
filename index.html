@@ -1,1 +1,883 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Système de Commande Triathlon (HTML/JS)</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        body { font-family: sans-serif; background-color: #f4f7f9; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .navbar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .nav-button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; }
+        .active { background-color: #3b82f6; color: white; }
+        .inactive { background-color: white; color: #4b5563; border: 1px solid #d1d5db; }
+        .card { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 20px; margin-bottom: 20px; }
+        .header-title { font-size: 1.5rem; font-weight: bold; margin-bottom: 20px; color: #1f2937; }
+        .form-group { background-color: #eff6ff; padding: 15px; border-radius: 6px; margin-bottom: 20px; }
+        .form-label { display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 4px; color: #374151; }
+        .input-text { width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; }
+        .category-header { padding: 10px 15px; font-weight: bold; color: #1f2937; border-bottom: 1px solid #e5e7eb; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background-color: #f3f4f6; }
+        .total-row { font-size: 1.125rem; font-weight: bold; border-top: 2px solid #1f2937; }
+        .action-button { padding: 12px 24px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.2s; }
+        .submit-button { background-color: #10b981; color: white; margin-right: 10px; }
+        .submit-button:hover { background-color: #059669; }
+        .reset-button { background-color: #ef4444; color: white; }
+        .reset-button:hover { background-color: #dc2626; }
+        .export-button { background-color: #22c55e; color: white; margin-left: 10px; }
+        .export-button:hover { background-color: #16a34a; }
+        .pdf-button { background-color: #f97316; color: white; margin-left: 10px; }
+        .pdf-button:hover { background-color: #ea580c; }
+        .excel-button { background-color: #10b981; color: white; margin-left: 10px; }
+        .excel-button:hover { background-color: #059669; }
+        .delete-order-btn { color: #ef4444; cursor: pointer; background: none; border: none; font-weight: bold; }
+        .search-container { margin-bottom: 20px; display: flex; gap: 10px; align-items: center; }
+        .order-item-detail { background-color: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 10px; }
+        .input-quantity { width: 60px; text-align: center; } 
+        .input-size { width: 80px; text-align: center; text-transform: uppercase; }
+        .clear-db-button { background-color: #b91c1c; color: white; }
+        .clear-db-button:hover { background-color: #991b1b; }
+    </style>
+</head>
+<body>
 
+<div class="container" id="app">
+    <div class="navbar">
+        <button id="nav-order" class="nav-button active">🛒 Nouvelle Commande</button>
+        <button id="nav-database" class="nav-button inactive">🗄️ Base de Données (<span id="orders-count">0</span>)</button>
+    </div>
+
+    <div id="order-view" class="card">
+        <h2 class="header-title">Bon de Commande</h2>
+        
+        <div class="form-group">
+            <h3>Informations du Triathlète</h3>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label for="firstName" class="form-label">Prénom *</label>
+                    <input type="text" id="firstName" class="input-text" placeholder="Prénom du triathlète">
+                </div>
+                <div>
+                    <label for="lastName" class="form-label">Nom *</label>
+                    <input type="text" id="lastName" class="input-text" placeholder="Nom du triathlète">
+                </div>
+            </div>
+        </div>
+
+        <div id="catalog-list" style="margin-bottom: 20px;"></div>
+
+        <div class="card" style="margin-top: 20px;">
+            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 20px; margin-bottom: 10px;">
+                <label for="discount" class="form-label" style="margin-right: 10px;">Remise (€):</label>
+                <input type="number" id="discount" class="input-text" style="width: 100px; text-align: right;" value="0" min="0">
+            </div>
+            
+            <div style="text-align: right; border-top: 1px solid #e5e7eb; padding-top: 10px;">
+                <p style="font-size: 1.1rem;">Sous-total : <span id="subtotal">0</span> €</p>
+                <p class="total-row">TOTAL : <span id="total">0</span> €</p>
+            </div>
+
+            <div style="display: flex; justify-content: center; margin-top: 20px;">
+                <button id="reset-current-order-btn" class="action-button reset-button">
+                    🗑️ Effacer la Commande en Cours
+                </button>
+                <button id="submit-order-btn" class="action-button submit-button" style="margin-left: 20px;">
+                    ➕ Enregistrer la Commande
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="database-view" class="card" style="display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 class="header-title">Base de Données des Commandes</h2>
+            <div style="display: flex; gap: 10px;">
+                <button id="export-csv-btn" class="nav-button export-button" style="background-color: #3b82f6;">⬇️ Exporter CSV</button>
+                <button id="export-excel-btn" class="nav-button excel-button">📄 Exporter Excel</button>
+                <button id="export-pdf-btn" class="nav-button pdf-button">📄 Exporter PDF</button>
+                <button id="clear-database-btn" class="nav-button action-button clear-db-button">
+                    ⚠️ Effacer la Base de Données
+                </button>
+            </div>
+        </div>
+        
+        <div class="search-container">
+            <label for="search-term">🔎 Recherche (Nom/Prénom) :</label>
+            <input type="text" id="search-term" class="input-text" style="width: 200px;">
+        </div>
+
+        <div id="orders-list">
+            <p id="no-orders" style="text-align: center; color: #6b7280; display: none;">Aucune commande trouvée.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const CATALOG = {
+        'TRI FONCTION HOMMES': [
+            { ref: 'NORSAE_V2 Peau S-TRI', price: 74 },
+            { ref: 'BORNEO V4', price: 103 },
+            { ref: 'BORNEO LD', price: 99 },
+            { ref: 'OTILIO Manches courtes. Peau S-Tri - Fermeture séparable', price: 116 }
+        ],
+        'TRI FONCTION FEMMES': [
+            { ref: 'FLORIDA_V2 Peau S-Tri - Dos aéré, maille aérée', price: 72 },
+            { ref: 'SIREEN sans manches Bretelles soutien-gorge et Dos nageur', price: 90 },
+            { ref: 'FLORIDA Peau S-Tri - Dos entier nageur, maille aérée', price: 72 },
+            { ref: 'ELZA Manches courtes. Peau S-Tri. Dos très échancré', price: 93 }
+        ],
+        'TRI FONCTION JEUNES': [
+            { ref: 'NORSAE_V2', price: 50 },
+            { ref: 'FLORIDA_V2', price: 50 },
+            { ref: 'HENIA Maillot de bain Fille', price: 34 },
+            { ref: 'HENI Maillot de bain Garçon', price: 28 }
+        ],
+        'TRI FONCTION: Débardeur et cuissard': [
+            { ref: 'TRILAE_V2 Débardeur HOMME', price: 42 },
+            { ref: 'HALF_V2 Cuissard', price: 51 },
+            { ref: 'LIZA Brassière', price: 25 },
+            { ref: 'HENI V2 Maillot de bain', price: 29 },
+            { ref: 'HENIA Maillot de bain Fille', price: 36 }
+        ],
+        'TRI FONCTION MIXTE': [
+            { ref: 'NORSAE_V2 Peau S-TRI', price: 74 },
+            { ref: 'ZACH (avec manches)', price: 83 }
+        ],
+        'VELO HOMMES': [
+            { ref: 'AKSEL mc_V2.1 Maillot MC', price: 49 },
+            { ref: 'ROCH ml_V2 Maillot ML', price: 64 },
+            { ref: 'EMIL mc_V2 Maillot MC', price: 44 },
+            { ref: 'EMIL ml_V2 Maillot ML', price: 47 },
+            { ref: 'KYLE_V2.1 Cuissard', price: 58 },
+            { ref: 'EDWAR_V2 Collant chaud', price: 68 }
+        ],
+        'VELO FEMMES': [
+            { ref: 'ALICIA mc_V3 Maillot MC', price: 53 },
+            { ref: 'ROCH Maillot ML', price: 64 },
+            { ref: 'KYLE FEMME V3 Cuissard sans bretelles', price: 54 },
+            { ref: 'KYLE FEMME V3 Cuissard avec bretelles', price: 60 },
+            { ref: 'EDWAR Cuissard long', price: 70 }
+        ],
+        'VELO ENFANT/JEUNES': [
+            { ref: 'MILIO MC Maillot MC', price: 33 },
+            { ref: 'MILIO ML Maillot ML', price: 42 },
+            { ref: 'KILIAN Cuissard court', price: 40 },
+            { ref: 'EDWIG Cuissard long', price: 56 }
+        ],
+        'COURSE A PIED': [
+            { ref: 'MEDHI short trail', price: 37 },
+            { ref: 'TEDDY Collant Poche dos zip', price: 36 },
+            { ref: 'BERYL Short plité', price: 35 },
+            { ref: 'TRACK collant trail', price: 52 },
+            { ref: 'VIOLETTE Short running femme', price: 47 },
+            { ref: 'KASH', price: 44 },
+            { ref: 'PEAK Corsaire Spécial TRAIL', price: 52 },
+            { ref: 'LANA MC Tee shirt', price: 28 },
+            { ref: 'BERKO MC', price: 31 }
+        ],
+        'VESTES ET GILETS': [
+            { ref: 'NATAN_V2.1 Gilet sans manches Coupe-vent', price: 62 },
+            { ref: 'GUSTY_V2 Coupe-vent', price: 54 },
+            { ref: 'GUST Coupe-vent', price: 54 },
+            { ref: 'PAUL Gilet sans manches amovibles', price: 112 },
+            { ref: 'CHESTER V3 Veste Thermique 3poches', price: 98 },
+            { ref: 'ADY Capuche adultes', price: 79 },
+            { ref: 'HOWEN Sweat adultes', price: 69 },
+            { ref: 'ADY Capuche Enfants', price: 67 },
+            { ref: 'HOWEN Sweat Enfants', price: 56 }
+        ],
+        'ACCESSOIRES': [
+            { ref: 'Filet de natation', price: 20 },
+            { ref: 'Manchettes (si 10 achetées)', price: 18 }
+        ]
+    };
+
+    let state = {
+        view: 'order',
+        firstName: '',
+        lastName: '',
+        quantities: {},
+        discount: 0,
+        orders: [],
+        searchTerm: ''
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function loadOrders() {
+        const saved = localStorage.getItem('triathlonOrders');
+        if (saved) {
+            state.orders = JSON.parse(saved);
+        }
+    }
+
+    function saveOrders(newOrders) {
+        localStorage.setItem('triathlonOrders', JSON.stringify(newOrders));
+        state.orders = newOrders;
+        updateOrderCount();
+    }
+
+    function updateOrderCount() {
+        $('orders-count').textContent = state.orders.length;
+    }
+
+    function getQuantityState(key) {
+        if (!state.quantities[key]) {
+            state.quantities[key] = { qty: 0, size: "" };
+        }
+        return state.quantities[key];
+    }
+
+    function calculateSubtotal() {
+        let total = 0;
+        Object.entries(state.quantities).forEach(([key, data]) => {
+            if (data.qty > 0) {
+                const [category, ref] = key.split('::');
+                const product = CATALOG[category].find(p => p.ref === ref);
+                if (product) {
+                    total += product.price * data.qty;
+                }
+            }
+        });
+        return total;
+    }
+
+    function calculateTotal() {
+        const subtotal = calculateSubtotal();
+        return Math.max(0, subtotal - state.discount);
+    }
+
+    function updateTotal() {
+        const subtotal = calculateSubtotal();
+        const total = calculateTotal();
+        $('subtotal').textContent = subtotal.toFixed(2);
+        $('total').textContent = total.toFixed(2);
+    }
+
+    function showNotification(message, type) {
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            background-color: ${type === 'success' ? '#047857' : '#f97316'}; 
+            transition: opacity 0.3s ease-in-out;
+            opacity: 1;
+        `;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.opacity = 0;
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 3000);
+    }
+
+    function handleQuantityChange(key, event) {
+        const value = parseInt(event.target.value) || 0;
+        const data = getQuantityState(key);
+        data.qty = Math.max(0, value);
+        updateTotal();
+    }
+
+    function handleSizeChange(key, event) {
+        const value = event.target.value.toUpperCase().trim();
+        const data = getQuantityState(key);
+        data.size = value;
+    }
+
+    function handleDiscountChange(event) {
+        const value = parseFloat(event.target.value) || 0;
+        state.discount = Math.max(0, value);
+        updateTotal();
+    }
+
+    function resetCurrentOrder() {
+        if (!confirm('Êtes-vous sûr de vouloir effacer la commande en cours ?')) {
+            return;
+        }
+        state.firstName = '';
+        state.lastName = '';
+        state.quantities = {};
+        state.discount = 0;
+        renderOrderView();
+        updateTotal();
+        showNotification('Saisie effacée.', 'info');
+    }
+
+    function handleSubmitOrder() {
+        state.firstName = $('firstName').value.trim();
+        state.lastName = $('lastName').value.trim();
+
+        if (!state.firstName || !state.lastName) {
+            alert('Veuillez renseigner le nom et prénom du triathlète');
+            return;
+        }
+
+        const items = [];
+        let hasError = false;
+
+        Object.entries(state.quantities).forEach(([key, data]) => {
+            if (data.qty > 0) {
+                const [category, ref] = key.split('::');
+                const product = CATALOG[category].find(p => p.ref === ref);
+                
+                if (product) {
+                    if (!data.size) {
+                        alert(`Veuillez saisir la taille pour le produit : "${product.ref}" (Catégorie: "${category}")`);
+                        hasError = true;
+                        return;
+                    }
+
+                    items.push({
+                        category,
+                        ref: product.ref,
+                        quantity: data.qty,
+                        size: data.size, 
+                        unitPrice: product.price,
+                        totalPrice: product.price * data.qty
+                    });
+                }
+            }
+        });
+
+        if (hasError) return;
+        
+        if (items.length === 0) {
+            alert('Veuillez sélectionner au moins un produit');
+            return;
+        }
+
+        const order = {
+            id: `order-${Date.now()}`,
+            date: new Date().toISOString(),
+            firstName: state.firstName,
+            lastName: state.lastName,
+            items,
+            subtotal: calculateSubtotal(),
+            discount: state.discount,
+            total: calculateTotal()
+        };
+
+        const newOrders = [order, ...state.orders];
+        saveOrders(newOrders);
+        
+        showNotification(`Commande de ${state.firstName} ${state.lastName} enregistrée.`, 'success');
+
+        state.firstName = '';
+        state.lastName = '';
+        state.quantities = {};
+        state.discount = 0;
+        renderOrderView();
+    }
+
+    function deleteOrder(orderId) {
+        if (confirm('Êtes-vous sûr de vouloir supprimer cette commande passée ?')) {
+            const newOrders = state.orders.filter(o => o.id !== orderId);
+            saveOrders(newOrders);
+            showNotification('Commande supprimée.', 'info');
+            renderDatabaseView();
+        }
+    }
+
+    function clearDatabase() {
+        if (confirm('⚠️ ATTENTION : Êtes-vous sûr de vouloir supprimer TOUTES les commandes enregistrées ? Cette action est IRRÉVERSIBLE.')) {
+            if (confirm('Vraiment supprimer TOUTES les données ? (Cliquez sur OK pour confirmer la suppression définitive)')) {
+                localStorage.removeItem('triathlonOrders');
+                state.orders = [];
+                updateOrderCount();
+                renderDatabaseView();
+                showNotification('Base de données effacée.', 'success');
+            }
+        }
+    }
+
+    function handleSearch(event) {
+        state.searchTerm = event.target.value.toLowerCase();
+        renderDatabaseView();
+    }
+
+    function renderOrderView() {
+        $('firstName').value = state.firstName;
+        $('lastName').value = state.lastName;
+        $('discount').value = state.discount;
+
+        const catalogList = $('catalog-list');
+        catalogList.innerHTML = '';
+
+        Object.entries(CATALOG).forEach(([category, products]) => {
+            const categoryDiv = document.createElement('div');
+            categoryDiv.className = 'card';
+            
+            let html = `<div class="category-header" style="background-color: #e0f2fe; color: #0284c7; border: 1px solid #bae6fd;">${category}</div>`;
+            html += '<table><thead><tr><th>Référence</th><th>Prix Unitaire</th><th style="width: 100px; text-align: center;">Taille</th><th style="width: 80px; text-align: center;">Qté</th><th>Total</th></tr></thead><tbody>';
+            
+            products.forEach(product => {
+                const key = `${category}::${product.ref}`;
+                const data = getQuantityState(key);
+                const qty = data.qty;
+                const size = data.size;
+                const totalPrice = product.price * qty;
+
+                const safeId = key.replace(/[^a-zA-Z0-9]/g, '_');
+
+                html += `
+                    <tr>
+                        <td>${product.ref}</td>
+                        <td>${product.price} €</td>
+                        <td style="text-align: center;">
+                            <input type="text" 
+                                id="${safeId}_size"
+                                class="input-text input-size size-input" 
+                                value="${size}" 
+                                data-key="${key}"
+                                maxlength="10">
+                        </td>
+                        <td style="text-align: center;">
+                            <input type="number" 
+                                id="${safeId}_qty"
+                                class="input-text input-quantity quantity-input" 
+                                value="${qty}" 
+                                min="0" 
+                                data-key="${key}">
+                        </td>
+                        <td>${totalPrice.toFixed(2)} €</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            categoryDiv.innerHTML = html;
+            catalogList.appendChild(categoryDiv);
+        });
+
+        document.querySelectorAll('.quantity-input').forEach(input => {
+            input.addEventListener('input', (event) => {
+                const key = event.target.getAttribute('data-key');
+                handleQuantityChange(key, event);
+                renderOrderView(); 
+            });
+        });
+
+        document.querySelectorAll('.size-input').forEach(input => {
+            input.addEventListener('input', (event) => {
+                const key = event.target.getAttribute('data-key');
+                handleSizeChange(key, event);
+            });
+        });
+
+        updateTotal();
+    }
+
+    function renderDatabaseView() {
+        const ordersList = $('orders-list');
+        ordersList.innerHTML = '';
+        
+        const filteredOrders = state.orders.filter(order => 
+            order.firstName.toLowerCase().includes(state.searchTerm) ||
+            order.lastName.toLowerCase().includes(state.searchTerm)
+        );
+
+        if (filteredOrders.length === 0) {
+            $('no-orders').style.display = 'block';
+            return;
+        } else {
+             $('no-orders').style.display = 'none';
+        }
+
+        filteredOrders.forEach(order => {
+            const orderDiv = document.createElement('div');
+            orderDiv.className = 'card';
+            
+            let html = `
+                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e5e7eb; padding-bottom: 10px; margin-bottom: 10px;">
+                    <h3 style="margin: 0;">
+                        Commande de ${order.firstName} ${order.lastName} 
+                        <span style="font-size: 0.8rem; color: #6b7280;">(${new Date(order.date).toLocaleDateString('fr-FR')})</span>
+                    </h3>
+                    <button class="delete-order-btn" data-order-id="${order.id}">[Supprimer]</button>
+                </div>
+                <div class="order-item-detail">
+                    <p><strong>TOTAL COMMANDE : ${order.total.toFixed(2)} €</strong> (Sous-total: ${order.subtotal.toFixed(2)} €, Remise: -${order.discount.toFixed(2)} €)</p>
+                    <table style="font-size: 0.9rem; margin-top: 10px;">
+                        <thead>
+                            <tr>
+                                <th>Catégorie</th>
+                                <th>Référence</th>
+                                <th style="text-align: center;">Taille</th>
+                                <th style="text-align: center;">Qté</th>
+                                <th style="text-align: right;">Prix Unitaire</th>
+                                <th style="text-align: right;">Total Ligne</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            order.items.forEach(item => {
+                html += `
+                    <tr>
+                        <td>${item.category}</td>
+                        <td>${item.ref}</td>
+                        <td style="text-align: center;">${item.size || 'N/A'}</td>
+                        <td style="text-align: center;">${item.quantity}</td>
+                        <td style="text-align: right;">${item.unitPrice.toFixed(2)} €</td>
+                        <td style="text-align: right;">${item.totalPrice.toFixed(2)} €</td>
+                    </tr>
+                `;
+            });
+
+            html += `</tbody></table></div>`;
+            
+            orderDiv.innerHTML = html;
+            ordersList.appendChild(orderDiv);
+        });
+        
+        document.querySelectorAll('.delete-order-btn').forEach(button => {
+            button.addEventListener('click', (event) => {
+                const orderId = event.target.getAttribute('data-order-id');
+                deleteOrder(orderId);
+            });
+        });
+    }
+
+    function exportToCSV() {
+        let csv = 'Date,Prénom,Nom,Catégorie,Référence,Taille,Quantité,Prix Unitaire,Total Ligne,Sous-total,Remise,Total Commande\n';
+        
+        state.orders.forEach(order => {
+            order.items.forEach((item, idx) => {
+                csv += `${new Date(order.date).toLocaleDateString('fr-FR')},`;
+                csv += `${order.firstName},${order.lastName},`;
+                csv += `"${item.category}","${item.ref}",`;
+                csv += `"${item.size || ''}",${item.quantity},${item.unitPrice},${item.totalPrice}`;
+                if (idx === 0) {
+                    csv += `,${order.subtotal},${order.discount},${order.total}`;
+                } else {
+                    csv += ',,,';
+                }
+                csv += '\n';
+            });
+        });
+        
+        const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+    }
+    
+    function prepareReferenceStats() {
+        const stats = {};
+        const allSizes = new Set();
+
+        state.orders.forEach(order => {
+            if (!order.items || !Array.isArray(order.items)) return; 
+            
+            order.items.forEach(item => {
+                if (!item || !item.ref || !item.quantity || item.quantity <= 0) return; 
+
+                const key = `${item.category || 'N/A'}::${item.ref}`;
+                const size = String(item.size || 'N/A').toUpperCase().trim();
+                const qty = Number(item.quantity) || 0;
+                const price = Number(item.unitPrice) || 0;
+
+                if (!stats[key]) {
+                    stats[key] = {
+                        category: item.category || 'N/A',
+                        ref: item.ref,
+                        price: price,
+                        sizes: {},
+                        totalQty: 0
+                    };
+                }
+
+                stats[key].sizes[size] = (stats[key].sizes[size] || 0) + qty;
+                stats[key].totalQty += qty;
+                allSizes.add(size);
+            });
+        });
+
+        const sizeOrder = ['XS', 'S', 'M', 'L', 'XL', 'XXL', 'XXXL', 'N/A'];
+        const sortedSizes = Array.from(allSizes).sort((a, b) => {
+            const aIndex = sizeOrder.indexOf(a);
+            const bIndex = sizeOrder.indexOf(b);
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+            if (aIndex !== -1) return -1;
+            if (bIndex !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        return { stats, sortedSizes };
+    }
+
+    function exportToExcel() {
+        try {
+            if (typeof XLSX === 'undefined') {
+                alert("Erreur: La librairie d'export Excel n'a pas pu être chargée.");
+                return;
+            }
+
+            if (state.orders.length === 0) {
+                alert("Aucune commande à exporter.");
+                return;
+            }
+
+            const workbook = XLSX.utils.book_new();
+
+            // SHEET 1: Commandes par Athlète
+            const dataForSheet1 = [];
+            dataForSheet1.push([
+                'Date', 'Prénom', 'Nom', 'Catégorie', 'Référence', 'Taille', 'Quantité', 
+                'Prix Unitaire (€)', 'Total Ligne (€)', 'Sous-total (€)', 'Remise (€)', 'Total Commande (€)'
+            ]);
+
+            state.orders.forEach(order => {
+                if (!order.items || !Array.isArray(order.items)) return;
+                
+                order.items.forEach((item, idx) => {
+                    const row = [
+                        new Date(order.date).toLocaleDateString('fr-FR'),
+                        order.firstName || '',
+                        order.lastName || '',
+                        item.category || '',
+                        item.ref || '',
+                        item.size || '', 
+                        Number(item.quantity) || 0,
+                        Number(item.unitPrice) || 0,
+                        Number(item.totalPrice) || 0
+                    ];
+                    
+                    if (idx === 0) {
+                        row.push(
+                            Number(order.subtotal) || 0, 
+                            Number(order.discount) || 0, 
+                            Number(order.total) || 0
+                        );
+                    } else {
+                        row.push('', '', '');
+                    }
+                    dataForSheet1.push(row);
+                });
+            });
+
+            const worksheet1 = XLSX.utils.aoa_to_sheet(dataForSheet1);
+            XLSX.utils.book_append_sheet(workbook, worksheet1, "1. Commandes par Athlète");
+
+            // SHEET 2: Stats Réf/Taille
+            const { stats, sortedSizes } = prepareReferenceStats();
+            
+            if (Object.keys(stats).length > 0) { 
+                const dataForSheet2 = [];
+
+                const header2 = ['Catégorie', 'Référence', 'Prix Unitaire (€)', ...sortedSizes, 'TOTAL (Qté)'];
+                dataForSheet2.push(header2);
+
+                Object.values(stats).forEach(data => {
+                    const row = [
+                        data.category || '',
+                        data.ref || '',
+                        Number(data.price) || 0
+                    ];
+
+                    sortedSizes.forEach(size => {
+                        row.push(Number(data.sizes[size]) || 0);
+                    });
+
+                    row.push(Number(data.totalQty) || 0);
+                    dataForSheet2.push(row);
+                });
+
+                const worksheet2 = XLSX.utils.aoa_to_sheet(dataForSheet2);
+                XLSX.utils.book_append_sheet(workbook, worksheet2, "2. Stats Réf-Taille");
+            }
+
+            const filename = `commandes_triathlon_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(workbook, filename);
+            showNotification('Export Excel généré avec succès.', 'success');
+            
+        } catch (error) {
+            console.error('Erreur lors de l\'export Excel:', error);
+            alert('Erreur lors de la génération du fichier Excel. Consultez la console pour plus de détails.');
+        }
+    }
+    
+    function exportToPDF() {
+        if (state.orders.length === 0) {
+            alert("Aucune commande à exporter.");
+            return;
+        }
+
+        showNotification('Génération du PDF en cours...', 'info');
+
+        // Créer un conteneur temporaire pour le PDF - VISIBLE pour html2canvas
+        const pdfContainer = document.createElement('div');
+        pdfContainer.style.cssText = 'position: fixed; top: 0; left: 0; width: 210mm; padding: 20px; background: white; font-family: Arial, sans-serif; z-index: 9999; overflow: visible;';
+        pdfContainer.id = 'pdf-temp-container';
+        
+        state.orders.forEach((order, index) => {
+            // Créer un bon de commande pour chaque athlète
+            const orderPage = document.createElement('div');
+            orderPage.className = 'pdf-page';
+            orderPage.style.cssText = 'page-break-after: always; padding: 20px; background: white; min-height: 297mm;';
+            
+            orderPage.innerHTML = `
+                <div style="border: 3px solid #3b82f6; padding: 20px; margin-bottom: 20px;">
+                    <h1 style="text-align: center; color: #3b82f6; margin: 0 0 10px 0; font-size: 28px;">
+                        BON DE COMMANDE TRIATHLON
+                    </h1>
+                    <p style="text-align: center; color: #6b7280; margin: 0; font-size: 14px;">
+                        Date: ${new Date(order.date).toLocaleDateString('fr-FR')}
+                    </p>
+                </div>
+
+                <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3b82f6;">
+                    <h2 style="color: #1f2937; margin: 0 0 10px 0; font-size: 20px;">Informations Client</h2>
+                    <p style="margin: 5px 0; font-size: 16px;"><strong>Prénom :</strong> ${order.firstName}</p>
+                    <p style="margin: 5px 0; font-size: 16px;"><strong>Nom :</strong> ${order.lastName}</p>
+                    <p style="margin: 5px 0; font-size: 14px; color: #6b7280;">N° Commande : ${order.id}</p>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin-bottom: 15px; font-size: 20px;">
+                        Détail de la Commande
+                    </h2>
+                    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                        <thead>
+                            <tr style="background-color: #3b82f6; color: white;">
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Catégorie</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #ddd;">Référence</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd; width: 60px;">Taille</th>
+                                <th style="padding: 10px; text-align: center; border: 1px solid #ddd; width: 50px;">Qté</th>
+                                <th style="padding: 10px; text-align: right; border: 1px solid #ddd; width: 80px;">Prix Unit.</th>
+                                <th style="padding: 10px; text-align: right; border: 1px solid #ddd; width: 90px;">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${order.items.map((item, idx) => `
+                                <tr style="background-color: ${idx % 2 === 0 ? '#f9fafb' : 'white'};">
+                                    <td style="padding: 8px; border: 1px solid #ddd; font-size: 11px;">${item.category}</td>
+                                    <td style="padding: 8px; border: 1px solid #ddd; font-size: 12px;">${item.ref}</td>
+                                    <td style="padding: 8px; text-align: center; border: 1px solid #ddd; font-weight: bold;">${item.size || 'N/A'}</td>
+                                    <td style="padding: 8px; text-align: center; border: 1px solid #ddd; font-weight: bold;">${item.quantity}</td>
+                                    <td style="padding: 8px; text-align: right; border: 1px solid #ddd;">${item.unitPrice.toFixed(2)} €</td>
+                                    <td style="padding: 8px; text-align: right; border: 1px solid #ddd; font-weight: bold;">${item.totalPrice.toFixed(2)} €</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="background-color: #f3f4f6; padding: 15px; border-radius: 8px; margin-top: 20px;">
+                    <table style="width: 100%; font-size: 16px;">
+                        <tr>
+                            <td style="text-align: right; padding: 5px;"><strong>Sous-total :</strong></td>
+                            <td style="text-align: right; padding: 5px; width: 120px;">${order.subtotal.toFixed(2)} €</td>
+                        </tr>
+                        ${order.discount > 0 ? `
+                        <tr>
+                            <td style="text-align: right; padding: 5px; color: #059669;"><strong>Remise :</strong></td>
+                            <td style="text-align: right; padding: 5px; color: #059669;">-${order.discount.toFixed(2)} €</td>
+                        </tr>
+                        ` : ''}
+                        <tr style="border-top: 2px solid #1f2937;">
+                            <td style="text-align: right; padding: 10px 5px 5px 5px; font-size: 20px;"><strong>TOTAL :</strong></td>
+                            <td style="text-align: right; padding: 10px 5px 5px 5px; font-size: 20px; color: #3b82f6;"><strong>${order.total.toFixed(2)} €</strong></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #d1d5db;">
+                    <p style="font-size: 11px; color: #6b7280; text-align: center; margin: 5px 0;">
+                        Ce bon de commande fait foi entre le club et le triathlète.
+                    </p>
+                    <p style="font-size: 11px; color: #6b7280; text-align: center; margin: 5px 0;">
+                        Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR')}
+                    </p>
+                </div>
+            `;
+            
+            pdfContainer.appendChild(orderPage);
+        });
+
+        document.body.appendChild(pdfContainer);
+
+        // Attendre un court instant pour que le DOM soit bien rendu
+        setTimeout(() => {
+            const options = {
+                margin: [10, 10, 10, 10],
+                filename: `bons_commande_triathlon_${new Date().toISOString().split('T')[0]}.pdf`,
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    logging: false,
+                    backgroundColor: '#ffffff'
+                },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            html2pdf().set(options).from(pdfContainer).save().then(() => {
+                document.body.removeChild(pdfContainer);
+                showNotification('PDF des bons de commande généré avec succès.', 'success');
+            }).catch(err => {
+                console.error('Erreur génération PDF:', err);
+                document.body.removeChild(pdfContainer);
+                alert('Erreur lors de la génération du PDF. Consultez la console.');
+            });
+        }, 100);
+    }
+
+    function setupEventListeners() {
+        $('nav-order').addEventListener('click', () => {
+            state.view = 'order';
+            $('order-view').style.display = 'block';
+            $('database-view').style.display = 'none';
+            $('nav-order').className = 'nav-button active';
+            $('nav-database').className = 'nav-button inactive';
+            renderOrderView();
+        });
+
+        $('nav-database').addEventListener('click', () => {
+            state.view = 'database';
+            $('order-view').style.display = 'none';
+            $('database-view').style.display = 'block';
+            $('nav-order').className = 'nav-button inactive';
+            $('nav-database').className = 'nav-button active';
+            renderDatabaseView();
+        });
+
+        $('submit-order-btn').addEventListener('click', handleSubmitOrder);
+        $('discount').addEventListener('input', handleDiscountChange);
+        $('firstName').addEventListener('input', (e) => state.firstName = e.target.value);
+        $('lastName').addEventListener('input', (e) => state.lastName = e.target.value);
+        $('search-term').addEventListener('input', handleSearch);
+
+        $('reset-current-order-btn').addEventListener('click', resetCurrentOrder);
+        $('clear-database-btn').addEventListener('click', clearDatabase);
+
+        $('export-csv-btn').addEventListener('click', exportToCSV);
+        $('export-excel-btn').addEventListener('click', exportToExcel); 
+        $('export-pdf-btn').addEventListener('click', exportToPDF);
+    }
+
+    loadOrders();
+    setupEventListeners();
+    renderOrderView();
+    updateOrderCount();
+
+</script>
+</body>
+</html>
